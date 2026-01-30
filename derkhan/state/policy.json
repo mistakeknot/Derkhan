@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "explorationRate": 0.12,
+  "weights": {
+    "novelty": 30,
+    "relevance": 30,
+    "authority": 20,
+    "impact": 15,
+    "diversity": 5
+  },
+  "domainMultipliers": {
+    "github.com": 1.15,
+    "docs.rs": 1.1,
+    "crates.io": 1.05,
+    "go.dev": 1.05,
+    "developer.chrome.com": 1.1
+  },
+  "queryTemplates": {
+    "perRepo": [
+      "{repo} release notes",
+      "{repo} changelog",
+      "{repo} breaking changes",
+      "{repo} security advisory",
+      "{repo} performance regression",
+      "{repo} benchmark"
+    ],
+    "crossRepo": [
+      "Rust perf profiling flamegraph 2026",
+      "Tauri performance profiling 2026",
+      "Go OpenTelemetry best practices 2026",
+      "MCP server testing visual regression TUI"
+    ]
+  },
+  "limits": {
+    "exaResultsPerQuery": 8,
+    "maxUrlsPerRepo": 6,
+    "maxItemsPerRepo": 3,
+    "minReposRepresented": 6
+  },
+  "searxngBaseUrl": "http://100.69.187.66:8081"
+}
