@@ -13,7 +13,13 @@
     "docs.rs": 1.1,
     "crates.io": 1.05,
     "go.dev": 1.05,
-    "developer.chrome.com": 1.1
+    "developer.chrome.com": 1.1,
+    "substack.com": 0.95,
+    "open.substack.com": 0.95
+  },
+  "allowedDomains": {
+    "substack.com": true,
+    "open.substack.com": true
   },
   "queryTemplates": {
     "perRepo": [
