@@ -250,7 +250,7 @@ async function main() {
   lines.push('');
   lines.push('## TL;DR');
   for (const c of chosen.slice(0, 5)) {
-    lines.push(`- **${c.repo}**: ${c.title} (${c.scores.total}) — ${c.url}`);
+    lines.push(`- **${c.repo}**: ${c.title} — ${c.url}`);
   }
   lines.push('');
   lines.push('## Per repo');
@@ -270,8 +270,6 @@ async function main() {
     if (REPO_PURPOSES[repo]) lines.push(`- Purpose: ${REPO_PURPOSES[repo]}`);
     for (const item of arr) {
       lines.push(`- **${item.title}** — ${item.url}`);
-      lines.push(`  - Scores: novelty ${item.scores.novelty}/5, relevance ${item.scores.relevance}/5, authority ${item.scores.authority}/5, impact ${item.scores.impact}/5 → **${item.scores.total}**`);
-      lines.push(`  - Tags: ${item.tags.join(', ')}`);
     }
   }
 
