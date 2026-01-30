@@ -21,14 +21,30 @@
     "substack.com": true,
     "open.substack.com": true
   },
+  "repoGithub": {
+    "tool-time": "mistakeknot/tool-time",
+    "Ong-Lots": "mistakeknot/Ong-Lots",
+    "Autarch": "mistakeknot/Autarch",
+    "moltbot": "moltbot/moltbot",
+    "shadow-work": "mistakeknot/shadow-work",
+    "ong-back": "mistakeknot/ong-back",
+    "Intermute": "mistakeknot/Intermute",
+    "tldr-swinton": "mistakeknot/tldr-swinton",
+    "tuivision": "mistakeknot/tuivision",
+    "pattern-royale": "mistakeknot/pattern-royale",
+    "interdoc": "mistakeknot/interdoc",
+    "interpeer": "mistakeknot/interpeer",
+    "Linsenkasten": "mistakeknot/Linsenkasten"
+  },
+  "strictGithubRepos": ["Autarch", "Intermute", "interdoc", "interpeer", "tldr-swinton"],
   "queryTemplates": {
     "perRepo": [
+      "site:github.com/{gh}",
+      "site:github.com/{gh} releases",
+      "site:github.com/{gh} changelog",
+      "site:github.com/{gh} security advisory",
       "{repo} release notes",
-      "{repo} changelog",
-      "{repo} breaking changes",
-      "{repo} security advisory",
-      "{repo} performance regression",
-      "{repo} benchmark"
+      "{repo} changelog"
     ],
     "crossRepo": [
       "Rust perf profiling flamegraph 2026",

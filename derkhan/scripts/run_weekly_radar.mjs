@@ -56,18 +56,40 @@ function scoreItem({ policy, seen, repo, url, title, snippet, engine }) {
   // 0-5 sub-scores
   const novelty = seen.has(nurl) ? 0 : 5;
 
-  // crude relevance: repo name or purpose keyword overlap
   const text = `${title || ''} ${snippet || ''}`.toLowerCase();
   const repoKey = repo.toLowerCase();
+  const repoKeySpaced = repoKey.replace(/-/g, ' ');
+  const gh = (policy.repoGithub?.[repo] || '').toLowerCase();
+  const strict = Array.isArray(policy.strictGithubRepos) && policy.strictGithubRepos.includes(repo);
+
+  // Relevance: prefer explicit matches on repo name or owner/repo.
   let relevance = 2;
-  if (text.includes(repoKey)) relevance = 5;
-  else if (text.includes(repoKey.replace(/-/g,' '))) relevance = 4;
+  if (gh && (text.includes(gh) || nurl.toLowerCase().includes(`github.com/${gh}`))) relevance = 5;
+  else if (text.includes(repoKey)) relevance = 5;
+  else if (text.includes(repoKeySpaced)) relevance = 4;
+  else relevance = 1;
 
   // authority heuristics
   let authority = 2;
   if (/github\.com\/(.*)\/(releases|pull|issues)/.test(nurl)) authority = 5;
   else if (/\/releases\b/.test(nurl)) authority = 4;
   else if (/(docs\.|developer\.|go\.dev|docs\.rs|crates\.io)/.test(domain)) authority = 4;
+
+  // Hard guardrail: if we know the canonical GitHub repo, strongly penalize GitHub URLs
+  // that are clearly not that repo (avoids homonyms and random GitHub search results).
+  if (gh) {
+    const want = `github.com/${gh}`;
+    const isCanonicalGithub = domain === 'github.com' && nurl.toLowerCase().includes(want);
+
+    if (strict) {
+      // Strict mode: only accept canonical GitHub URLs.
+      if (!isCanonicalGithub) return null;
+    } else if (domain === 'github.com' && !isCanonicalGithub) {
+      // Non-strict: keep but strongly penalize other GitHub repos.
+      relevance = Math.min(relevance, 1);
+      authority = Math.min(authority, 2);
+    }
+  }
 
   // impact heuristics
   let impact = 2;
@@ -107,6 +129,17 @@ function scoreItem({ policy, seen, repo, url, title, snippet, engine }) {
     scores: { novelty, relevance, authority, impact, diversity, total },
     tags
   };
+}
+
+function seedCanonicalLinks({ repo, gh }) {
+  if (!gh) return [];
+  const base = `https://github.com/${gh}`;
+  return [
+    { title: `${gh} (repo)`, url: base },
+    { title: `${gh} releases`, url: `${base}/releases` },
+    { title: `${gh} issues`, url: `${base}/issues` },
+    { title: `${gh} security`, url: `${base}/security` }
+  ];
 }
 
 function pickTop({ policy, candidates }) {
@@ -166,8 +199,19 @@ async function main() {
   // Exa-first collection
   for (const repo of repos) {
     const templates = policy.queryTemplates?.perRepo ?? [];
-    for (const t of templates.slice(0, 4)) {
-      const q = t.replaceAll('{repo}', repo);
+    const gh = policy.repoGithub?.[repo] ?? '';
+    const strict = Array.isArray(policy.strictGithubRepos) && policy.strictGithubRepos.includes(repo);
+
+    // Exa is great for broad web discovery, but it does a poor job honoring strict GitHub targeting.
+    // For ambiguous repo names, skip Exa and rely on SearXNG with explicit site/github queries.
+    if (strict) continue;
+
+    for (const t of templates.slice(0, 5)) {
+      let q = t.replaceAll('{repo}', repo);
+      if (q.includes('{gh}')) {
+        if (!gh) continue;
+        q = q.replaceAll('{gh}', gh);
+      }
       let results = [];
       try {
         results = exaWebSearch({ query: q, numResults: policy.limits.exaResultsPerQuery ?? 8, type: 'fast' });
@@ -178,7 +222,7 @@ async function main() {
       }
       for (const r of results) {
         if (!r.url) continue;
-        candidates.push(scoreItem({
+        const scored = scoreItem({
           policy,
           seen,
           repo,
@@ -186,7 +230,8 @@ async function main() {
           title: r.title,
           snippet: r.snippet,
           engine: 'exa'
-        }));
+        });
+        if (scored) candidates.push(scored);
       }
     }
   }
@@ -203,11 +248,14 @@ async function main() {
       if (!r.url) continue;
       // best-effort assign to a repo by name mention
       let repo = repos.find(rr => (r.title || '').toLowerCase().includes(rr.toLowerCase())) || 'cross-repo';
-      candidates.push(scoreItem({ policy, seen, repo, url: r.url, title: r.title, snippet: r.snippet, engine: 'exa' }));
+      {
+        const scored = scoreItem({ policy, seen, repo, url: r.url, title: r.title, snippet: r.snippet, engine: 'exa' });
+        if (scored) candidates.push(scored);
+      }
     }
   }
 
-  // SearXNG backstop: only for repos that have few novel candidates
+  // SearXNG backstop: only for repos that have few novel candidates (or strict repos)
   const byRepo = new Map();
   for (const c of candidates) {
     const arr = byRepo.get(c.repo) || [];
@@ -216,21 +264,54 @@ async function main() {
   }
 
   for (const repo of repos) {
+    const strict = Array.isArray(policy.strictGithubRepos) && policy.strictGithubRepos.includes(repo);
+    const gh = policy.repoGithub?.[repo] ?? '';
+
     const repoCands = (byRepo.get(repo) || []).filter(x => x.scores.novelty === 5);
-    if (repoCands.length >= 2) continue;
-    const q = `${repo} release notes`;
-    try {
-      const j = searxngSearchJson({ baseUrl: policy.searxngBaseUrl, q });
-      const results = j?.results || [];
-      for (const r of results.slice(0, 6)) {
-        if (!r.url) continue;
-        const scored = scoreItem({ policy, seen, repo, url: r.url, title: r.title, snippet: r.content, engine: 'searxng' });
-        // small penalty for searxng-only unless high authority
-        if (scored.engine === 'searxng' && scored.scores.authority < 4) scored.scores.total -= 5;
-        candidates.push(scored);
+    if (!strict && repoCands.length >= 2) continue;
+
+    const queries = [];
+    if (gh) {
+      queries.push(`site:github.com/${gh} releases`);
+      queries.push(`site:github.com/${gh} changelog`);
+      queries.push(`site:github.com/${gh} security advisory`);
+      queries.push(`site:github.com/${gh} issues`);
+    } else {
+      queries.push(`${repo} release notes`);
+      queries.push(`${repo} changelog`);
+    }
+
+    for (const q of queries.slice(0, strict ? 4 : 2)) {
+      try {
+        const j = searxngSearchJson({ baseUrl: policy.searxngBaseUrl, q });
+        const results = j?.results || [];
+        for (const r of results.slice(0, 6)) {
+          if (!r.url) continue;
+          const scored = scoreItem({ policy, seen, repo, url: r.url, title: r.title, snippet: r.content, engine: 'searxng' });
+          if (!scored) continue;
+          // small penalty for searxng-only unless high authority
+          if (scored.engine === 'searxng' && scored.scores.authority < 4) scored.scores.total -= 5;
+          candidates.push(scored);
+        }
+      } catch (e) {
+        console.error(`WARN: SearXNG failed (${repo}): ${q}`);
       }
-    } catch (e) {
-      console.error(`WARN: SearXNG failed (${repo}): ${q}`);
+    }
+  }
+
+  // If strict repos have no viable candidates (search engines blocked), seed canonical GitHub links.
+  for (const repo of repos) {
+    const strict = Array.isArray(policy.strictGithubRepos) && policy.strictGithubRepos.includes(repo);
+    if (!strict) continue;
+    const gh = policy.repoGithub?.[repo] ?? '';
+    if (!gh) continue;
+
+    const existing = candidates.filter(c => c.repo === repo);
+    if (existing.length >= (policy.limits.maxItemsPerRepo ?? 3)) continue;
+
+    for (const s of seedCanonicalLinks({ repo, gh })) {
+      const scored = scoreItem({ policy, seen, repo, url: s.url, title: s.title, snippet: '', engine: 'seed' });
+      if (scored) candidates.push(scored);
     }
   }
 

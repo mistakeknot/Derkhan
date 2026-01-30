@@ -18,6 +18,24 @@ export const REPO_PURPOSES = {
   'Linsenkasten': 'MCP server + CLI + web + API for FLUX lenses; product UX, API correctness, schema/contracts, deployment reliability'
 };
 
+export const REPO_GITHUB = {
+  // Map our internal repo names to their canonical GitHub repo, when known.
+  // This is used to avoid homonym results (e.g. Autarch/Warhammer, shadow-work therapy content).
+  'tool-time': 'mistakeknot/tool-time',
+  'Ong-Lots': 'mistakeknot/Ong-Lots',
+  'Autarch': 'mistakeknot/Autarch',
+  'moltbot': 'moltbot/moltbot',
+  'shadow-work': 'mistakeknot/shadow-work',
+  'ong-back': 'mistakeknot/ong-back',
+  'Intermute': 'mistakeknot/Intermute',
+  'tldr-swinton': 'mistakeknot/tldr-swinton',
+  'tuivision': 'mistakeknot/tuivision',
+  'pattern-royale': 'mistakeknot/pattern-royale',
+  'interdoc': 'mistakeknot/interdoc',
+  'interpeer': 'mistakeknot/interpeer',
+  'Linsenkasten': 'mistakeknot/Linsenkasten'
+};
+
 export function defaultPolicy() {
   return {
     version: 1,
@@ -30,14 +48,19 @@ export function defaultPolicy() {
       'go.dev': 1.05,
       'developer.chrome.com': 1.10
     },
+    repoGithub: REPO_GITHUB,
+    // Repos with highly ambiguous names: only accept canonical GitHub URLs.
+    strictGithubRepos: ['Autarch', 'Intermute', 'interdoc', 'interpeer', 'tldr-swinton'],
     queryTemplates: {
       perRepo: [
+        // Prefer GitHub-targeted queries when repoGithub is known.
+        'site:github.com/{gh}',
+        'site:github.com/{gh} releases',
+        'site:github.com/{gh} changelog',
+        'site:github.com/{gh} security advisory',
+        // fallback broader queries
         '{repo} release notes',
-        '{repo} changelog',
-        '{repo} breaking changes',
-        '{repo} security advisory',
-        '{repo} performance regression',
-        '{repo} benchmark'
+        '{repo} changelog'
       ],
       crossRepo: [
         'Rust perf profiling flamegraph 2026',
